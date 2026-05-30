@@ -1,15 +1,40 @@
 #!/bin/sh
 
-echo "=== All ENV vars ==="
-env | sort
-echo "=== End ENV ==="
+# Semaphore passes environment JSON keys as positional KEY=VALUE args
+for arg in "$@"; do
+    case "$arg" in
+        TASK_NUM=*)      TASK_NUM="${arg#TASK_NUM=}" ;;
+        INPUT_PAYLOAD=*) INPUT_PAYLOAD="${arg#INPUT_PAYLOAD=}" ;;
+    esac
+done
 
 TASK_NUM="${TASK_NUM:-1}"
 INPUT_PAYLOAD="${INPUT_PAYLOAD:-none}"
-ARG1="${1:-}"
-ARG2="${2:-}"
+SLEEP_TIME=$(( (RANDOM % 6) + 2 ))
 
-echo "TASK_NUM env var: ${TASK_NUM}"
-echo "INPUT_PAYLOAD env var: ${INPUT_PAYLOAD}"
-echo "ARG1 positional: ${ARG1}"
-echo "ARG2 positional: ${ARG2}"
+pick_word() {
+    words="$1"
+    count=$(echo "$words" | wc -w)
+    idx=$(( (RANDOM % count) + 1 ))
+    echo "$words" | tr ' ' '\n' | sed -n "${idx}p"
+}
+
+A=$(pick_word "swift lazy bright dark fuzzy bold calm sharp stormy silent")
+B=$(pick_word "falcon river pixel circuit signal comet vortex matrix anchor beacon")
+N=$(( RANDOM % 9000 + 1000 ))
+PAYLOAD="T${TASK_NUM}-${A}-${B}-${N}"
+CHAIN="${INPUT_PAYLOAD};${PAYLOAD}"
+
+echo "========================================"
+echo "  Sub-task #${TASK_NUM}"
+echo "  Received:  ${INPUT_PAYLOAD}"
+echo "  Sleeping:  ${SLEEP_TIME}s"
+echo "========================================"
+
+sleep "${SLEEP_TIME}"
+
+echo ""
+echo "  Generated: ${PAYLOAD}"
+echo "  Chain:     ${CHAIN}"
+echo ""
+echo "PAYLOAD_OUTPUT:${CHAIN}"
