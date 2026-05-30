@@ -8,6 +8,16 @@ SUBTASK_TEMPLATE_ID="41602"
 SUMMARY_FILE="/tmp/wf_summary.txt"
 rm -f "${SUMMARY_FILE}"
 
+api_post() {
+    wget -qO- --header="Authorization: Bearer ${TOKEN}" \
+        --header="Content-Type: application/json" \
+        --post-data="$1" "$2"
+}
+
+api_get() {
+    wget -qO- --header="Authorization: Bearer ${TOKEN}" "$1"
+}
+
 run_subtask() {
     NUM=$1
     INPUT=$2
@@ -23,18 +33,14 @@ run_subtask() {
     ENV_JSON="{\\\"TASK_NUM\\\":\\\"${NUM}\\\",\\\"INPUT_PAYLOAD\\\":\\\"${INPUT}\\\"}"
     BODY="{\"template_id\":${SUBTASK_TEMPLATE_ID},\"message\":\"workflow-sub-${NUM}\",\"environment\":\"${ENV_JSON}\"}"
 
-    RESP=$(curl -s -X POST "${API}/project/${PROJECT}/tasks" \
-        -H "Authorization: Bearer ${TOKEN}" \
-        -H "Content-Type: application/json" \
-        -d "${BODY}")
-
+    RESP=$(api_post "${BODY}" "${API}/project/${PROJECT}/tasks")
     TASK_ID=$(echo "${RESP}" | grep -o '"id":[0-9]*' | head -1 | sed 's/"id"://')
     echo "|  Task ID: ${TASK_ID}"
 
     STATUS=""
     while true; do
         sleep 1
-        TJ=$(curl -s "${API}/project/${PROJECT}/tasks/${TASK_ID}" -H "Authorization: Bearer ${TOKEN}")
+        TJ=$(api_get "${API}/project/${PROJECT}/tasks/${TASK_ID}")
         STATUS=$(echo "${TJ}" | grep -o '"status":"[^"]*"' | head -1 | sed 's/"status":"//;s/"//')
         printf "|  [%s] %s\n" "$(date -u '+%H:%M:%S')" "${STATUS}"
         case "${STATUS}" in success|error|stopped) break ;; esac
@@ -44,7 +50,7 @@ run_subtask() {
     ST_EPOCH_END=$(date +%s)
     ST_DURATION=$(( ST_EPOCH_END - ST_EPOCH_START ))
 
-    OUT=$(curl -s "${API}/project/${PROJECT}/tasks/${TASK_ID}/output" -H "Authorization: Bearer ${TOKEN}")
+    OUT=$(api_get "${API}/project/${PROJECT}/tasks/${TASK_ID}/output")
     ST_PAYLOAD=$(echo "${OUT}" | grep -o '"output":"PAYLOAD_OUTPUT:[^"]*"' | head -1 | sed 's/"output":"PAYLOAD_OUTPUT://;s/"$//')
 
     echo "|  End:      ${ST_END}"
