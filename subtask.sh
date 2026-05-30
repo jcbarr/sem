@@ -2,7 +2,6 @@
 
 TASK_NUM="${TASK_NUM:-1}"
 INPUT_PAYLOAD="${INPUT_PAYLOAD:-none}"
-
 SLEEP_TIME=$(( (RANDOM % 6) + 2 ))
 
 pick_word() {
@@ -16,6 +15,7 @@ A=$(pick_word "swift lazy bright dark fuzzy bold calm sharp stormy silent")
 B=$(pick_word "falcon river pixel circuit signal comet vortex matrix anchor beacon")
 N=$(( RANDOM % 9000 + 1000 ))
 PAYLOAD="T${TASK_NUM}-${A}-${B}-${N}"
+CHAIN="${INPUT_PAYLOAD};${PAYLOAD}"
 
 echo "========================================"
 echo "  Sub-task #${TASK_NUM}"
@@ -27,6 +27,6 @@ sleep "${SLEEP_TIME}"
 
 echo ""
 echo "  Generated: ${PAYLOAD}"
-echo "  Chain:     ${INPUT_PAYLOAD} -> ${PAYLOAD}"
+echo "  Chain:     ${CHAIN}"
 echo ""
-echo "PAYLOAD_OUTPUT:${INPUT_PAYLOAD}->${PAYLOAD}"
+echo "PAYLOAD_OUTPUT:${CHAIN}"
