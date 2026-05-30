@@ -8,14 +8,19 @@ SUBTASK_TEMPLATE_ID="41602"
 SUMMARY_FILE="/tmp/wf_summary.txt"
 rm -f "${SUMMARY_FILE}"
 
+api_get() {
+    wget -qO- --header="Authorization: Bearer ${TOKEN}" "$1"
+}
+
 api_post() {
-    wget -qO- --header="Authorization: Bearer ${TOKEN}" \
+    wget -qO- \
+        --header="Authorization: Bearer ${TOKEN}" \
         --header="Content-Type: application/json" \
         --post-data="$1" "$2"
 }
 
-api_get() {
-    wget -qO- --header="Authorization: Bearer ${TOKEN}" "$1"
+api_delete() {
+    wget -qO- --method=DELETE --header="Authorization: Bearer ${TOKEN}" "$1" 2>/dev/null || true
 }
 
 run_subtask() {
@@ -30,13 +35,21 @@ run_subtask() {
     echo "|  Start:  ${ST_START}"
     echo "|  Input:  ${INPUT}"
 
-    ENV_JSON="{\\\"TASK_NUM\\\":\\\"${NUM}\\\",\\\"INPUT_PAYLOAD\\\":\\\"${INPUT}\\\"}"
-    BODY="{\"template_id\":${SUBTASK_TEMPLATE_ID},\"message\":\"workflow-sub-${NUM}\",\"environment\":\"${ENV_JSON}\"}"
+    # Create a Semaphore environment object for this task's variables
+    ENV_BODY=$(printf '{"name":"wf-sub-%s-env","project_id":%s,"secrets":[{"name":"TASK_NUM","secret":"%s","type":"env"},{"name":"INPUT_PAYLOAD","secret":"%s","type":"env"}]}' \
+        "${NUM}" "${PROJECT}" "${NUM}" "${INPUT}")
+    ENV_RESP=$(api_post "${ENV_BODY}" "${API}/project/${PROJECT}/environment")
+    ENV_ID=$(echo "${ENV_RESP}" | grep -o '"id":[0-9]*' | head -1 | sed 's/"id"://')
+    echo "|  Env ID:  ${ENV_ID}"
 
-    RESP=$(api_post "${BODY}" "${API}/project/${PROJECT}/tasks")
+    # Trigger sub-task with the environment
+    TASK_BODY=$(printf '{"template_id":%s,"message":"workflow-sub-%s","environment_id":%s}' \
+        "${SUBTASK_TEMPLATE_ID}" "${NUM}" "${ENV_ID}")
+    RESP=$(api_post "${TASK_BODY}" "${API}/project/${PROJECT}/tasks")
     TASK_ID=$(echo "${RESP}" | grep -o '"id":[0-9]*' | head -1 | sed 's/"id"://')
     echo "|  Task ID: ${TASK_ID}"
 
+    # Poll until done
     STATUS=""
     while true; do
         sleep 1
@@ -50,13 +63,18 @@ run_subtask() {
     ST_EPOCH_END=$(date +%s)
     ST_DURATION=$(( ST_EPOCH_END - ST_EPOCH_START ))
 
+    # Extract payload from output
     OUT=$(api_get "${API}/project/${PROJECT}/tasks/${TASK_ID}/output")
-    ST_PAYLOAD=$(echo "${OUT}" | grep -o '"output":"PAYLOAD_OUTPUT:[^"]*"' | head -1 | sed 's/"output":"PAYLOAD_OUTPUT://;s/"$//')
+    ST_PAYLOAD=$(echo "${OUT}" | grep -o '"output":"PAYLOAD_OUTPUT:[^"]*"' | head -1 \
+        | sed 's/"output":"PAYLOAD_OUTPUT://;s/"$//')
 
     echo "|  End:      ${ST_END}"
     echo "|  Duration: ${ST_DURATION}s  Status: ${STATUS}"
     echo "|  Payload:  ${ST_PAYLOAD}"
     echo "+---------------------------------------------------"
+
+    # Cleanup env
+    api_delete "${API}/project/${PROJECT}/environment/${ENV_ID}" > /dev/null 2>&1
 
     printf "  #%s | %s -> %s | %ss | %s\n      payload: %s\n" \
         "${NUM}" "${ST_START}" "${ST_END}" "${ST_DURATION}" "${STATUS}" "${ST_PAYLOAD}" \
